@@ -284,20 +284,29 @@ async function finishInteractiveSession() {
     // Locate Active Users card in the iframe
     log('info', 'Verifying Active Users card visibility in Firebase Console...');
     const frame = page.frameLocator('iframe').first();
-    const card = frame.locator(config.browser.cardSelector);
+    const realtimeCard = frame
+      .locator('ga-card[data-guidedhelpid="realtime"], ga-card')
+      .filter({ hasText: '30 minutes' })
+      .first();
 
     let cardFound = false;
     try {
-      await card.waitFor({ state: 'visible', timeout: Math.min(config.browser.cardWaitTimeout, 45000) });
+      await realtimeCard.waitFor({ state: 'visible', timeout: Math.min(config.browser.cardWaitTimeout, 45000) });
       cardFound = true;
     } catch (_) {
-      // Fallback text-based locator
       try {
-        const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
-        await textCard.waitFor({ state: 'visible', timeout: 15000 });
+        const card = frame.locator(config.browser.cardSelector).first();
+        await card.waitFor({ state: 'visible', timeout: 15000 });
         cardFound = true;
       } catch (err2) {
-        cardFound = false;
+        // Fallback text-based locator
+        try {
+          const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
+          await textCard.waitFor({ state: 'visible', timeout: 15000 });
+          cardFound = true;
+        } catch (err3) {
+          cardFound = false;
+        }
       }
     }
 

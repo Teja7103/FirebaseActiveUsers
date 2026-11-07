@@ -71,17 +71,35 @@ async function captureOnce() {
       );
     }
 
+    // The Firebase Analytics dashboard embeds Google Analytics inside an iframe
     const frame = page.frameLocator('iframe').first();
-    const card = frame.locator(config.browser.cardSelector);
+
+    // Specifically target the Realtime Active Users in last 30 minutes card
+    const realtimeCard = frame
+      .locator('ga-card[data-guidedhelpid="realtime"], ga-card')
+      .filter({ hasText: '30 minutes' })
+      .first();
+
     let buffer;
     try {
-      await card.waitFor({ state: 'visible', timeout: config.browser.cardWaitTimeout });
-      buffer = await card.screenshot();
+      await realtimeCard.waitFor({ state: 'visible', timeout: config.browser.cardWaitTimeout });
+      buffer = await realtimeCard.screenshot();
     } catch (selectorErr) {
-      // Fallback text locator matching authenticate.js
-      const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
-      await textCard.waitFor({ state: 'visible', timeout: 30000 });
-      buffer = await textCard.screenshot();
+      try {
+        // Fallback 1: configured cardSelector
+        const configCard = frame.locator(config.browser.cardSelector).first();
+        await configCard.waitFor({ state: 'visible', timeout: 15000 });
+        buffer = await configCard.screenshot();
+      } catch (err2) {
+        // Fallback 2: text locator with parent card container
+        const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
+        await textCard.waitFor({ state: 'visible', timeout: 20000 });
+        const parentCard = textCard
+          .locator('xpath=ancestor::ga-card[1] | ancestor::div[contains(@class, "card")][1]')
+          .first();
+        const target = (await parentCard.isVisible().catch(() => false)) ? parentCard : textCard;
+        buffer = await target.screenshot();
+      }
     }
 
     cacheBuffer = buffer;
