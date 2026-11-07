@@ -7,6 +7,35 @@ const { log } = require('../utils/logger');
 let sharedBrowser = null;
 let sharedContext = null;
 let contextPromise = null;
+let cachedStorageState = null;
+
+function getStorageState() {
+  if (cachedStorageState) return cachedStorageState;
+  try {
+    const stateFile = path.resolve(process.cwd(), config.browser.authStateFile);
+    if (fs.existsSync(stateFile)) {
+      const raw = fs.readFileSync(stateFile, 'utf8');
+      cachedStorageState = JSON.parse(raw);
+      return cachedStorageState;
+    }
+  } catch (err) {
+    log('warn', 'Failed to read storage state from file', { error: err.message });
+  }
+  return null;
+}
+
+function setStorageState(state) {
+  cachedStorageState = state;
+  try {
+    const stateFile = path.resolve(process.cwd(), config.browser.authStateFile);
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    const content = typeof state === 'string' ? state : JSON.stringify(state, null, 2);
+    fs.writeFileSync(stateFile, content, 'utf8');
+    log('info', 'Updated storageState saved to disk and memory cache');
+  } catch (err) {
+    log('warn', 'Failed to write storage state to disk', { error: err.message });
+  }
+}
 
 const DEFAULT_CHROME_ARGS = [
   '--disable-field-trial-config',
@@ -72,6 +101,11 @@ function getBrowserlessWsEndpoint() {
     if (config.browserless.token && !u.includes('token=')) {
       const sep = u.includes('?') ? '&' : '?';
       u = `${u}${sep}token=${encodeURIComponent(config.browserless.token)}`;
+    }
+    // Append keepalive timeout (10 minutes) if not configured
+    if (!u.includes('timeout=')) {
+      const sep = u.includes('?') ? '&' : '?';
+      u = `${u}${sep}timeout=600000`;
     }
     return u;
   }
@@ -141,15 +175,22 @@ async function getBrowserContext() {
           contextPromise = null;
         });
 
-        const contexts = browser.contexts();
-        let ctx = contexts[0];
-        if (!ctx) {
-          ctx = await browser.newContext({
-            viewport: config.browser.viewport,
-          });
+        // Initialize a new browser context with full storageState (both cookies AND localStorage)
+        const state = getStorageState();
+        const ctxOptions = {
+          viewport: config.browser.viewport,
+        };
+        if (state) {
+          ctxOptions.storageState = state;
+          log('info', 'Initialized Browserless context with persistent storageState (cookies & localStorage)');
         }
 
-        await hydrateCookiesFromStateFile(ctx);
+        const ctx = await browser.newContext(ctxOptions);
+        ctx.on('close', () => {
+          log('info', 'Shared Browserless context closed. Clearing reference.');
+          sharedContext = null;
+        });
+
         sharedContext = ctx;
         log('info', 'Remote Browserless context ready for screenshot operations');
         return ctx;
@@ -303,4 +344,6 @@ module.exports = {
   isBrowserlessConfigured,
   getBrowserlessWsEndpoint,
   resolvePublicLiveUrl,
+  getStorageState,
+  setStorageState,
 };

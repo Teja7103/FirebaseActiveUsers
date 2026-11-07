@@ -50,12 +50,19 @@ async function captureOnce() {
     });
     await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
 
+    // If redirected to Google accounts for an SSO handshake, allow it up to 15s to return to Firebase Console
+    if (page.url().includes('accounts.google.com') && !page.url().includes('/signin') && !page.url().includes('/ServiceLogin')) {
+      await page.waitForURL((url) => !url.href.includes('accounts.google.com'), { timeout: 15000 }).catch(() => {});
+    }
+
     const currentUrl = page.url();
-    if (
-      currentUrl.includes('accounts.google.com') ||
+    const isLoginPage =
       currentUrl.includes('/signin') ||
-      currentUrl.includes('/o/oauth')
-    ) {
+      currentUrl.includes('/ServiceLogin') ||
+      currentUrl.includes('/v3/signin') ||
+      currentUrl.includes('/InteractiveLogin');
+
+    if (isLoginPage) {
       try {
         require('./auth.service').markAuthExpired('FIREBASE_REDIRECT_TO_GOOGLE');
       } catch (_) { /* ignore */ }

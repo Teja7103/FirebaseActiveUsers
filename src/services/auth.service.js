@@ -307,16 +307,14 @@ async function finishInteractiveSession() {
       throw new Error('Firebase Console loaded, but the Active Users card could not be found. Ensure the authenticated account has Firebase Analytics viewer permissions.');
     }
 
-    // Save storage state to disk
-    const stateFile = path.resolve(process.cwd(), config.browser.authStateFile);
-    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
-    await page.context().storageState({ path: stateFile });
-    log('info', 'Authentication storageState saved successfully', { stateFile });
+    // Save storage state to disk and memory cache
+    const stateData = await page.context().storageState();
+    browserService.setStorageState(stateData);
 
     // Encrypted backup
     if (config.security.sessionBackupPassphrase) {
       try {
-        const jsonContent = fs.readFileSync(stateFile, 'utf8');
+        const jsonContent = typeof stateData === 'string' ? stateData : JSON.stringify(stateData);
         backupAuthState(jsonContent, config.security.sessionBackupPassphrase);
         log('info', 'Encrypted backup of session state created');
       } catch (backupErr) {
