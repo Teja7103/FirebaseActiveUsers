@@ -298,20 +298,39 @@ async function finishInteractiveSession() {
     const timeoutMs = Math.min(config.browser.cardWaitTimeout, 45000);
 
     while (Date.now() - startTime < timeoutMs) {
-      // 1. Direct page search: container with "30 minutes"
+      // 1a. Precise data-attribute (most reliable)
       try {
-        const candidates = [
-          page.locator('div, section, ga-card, mat-card').filter({ hasText: /30 minutes/i }).last(),
-          page.getByText(/active users in last 30 minutes/i).first(),
-          page.getByText(/30 minutes/i).first(),
-          page.locator('[data-guidedhelpid="realtime"]').first(),
-        ];
+        const realtimeCard = page.locator('[data-guidedhelpid="realtime"]').first();
+        if (await realtimeCard.isVisible({ timeout: 1500 }).catch(() => false)) {
+          cardFound = true;
+          log('info', 'Verified Active Users card via data-guidedhelpid=realtime');
+        }
+      } catch (_) {}
+      if (cardFound) break;
 
-        for (const el of candidates) {
-          if (await el.isVisible({ timeout: 1000 }).catch(() => false)) {
-            cardFound = true;
-            log('info', 'Verified Active Users card on main page');
-            break;
+      // 1b. Exact heading text (innermost element, avoids giant ancestors)
+      try {
+        const textEl = page.getByText(/ACTIVE USERS IN LAST 30 MINUTES/i).first();
+        if (await textEl.isVisible({ timeout: 1500 }).catch(() => false)) {
+          cardFound = true;
+          log('info', 'Verified Active Users card via heading text');
+        }
+      } catch (_) {}
+      if (cardFound) break;
+
+      // 1c. Narrower text search on small elements only
+      try {
+        const els = page.locator('h2, h3, h4, span, p').filter({ hasText: /30 minutes/i });
+        const count = await els.count().catch(() => 0);
+        for (let i = 0; i < count; i++) {
+          const el = els.nth(i);
+          if (await el.isVisible({ timeout: 500 }).catch(() => false)) {
+            const bbox = await el.boundingBox().catch(() => null);
+            if (bbox && bbox.width < 1000) {
+              cardFound = true;
+              log('info', 'Verified Active Users card via narrow 30-minutes text');
+              break;
+            }
           }
         }
       } catch (_) {}

@@ -7,9 +7,16 @@ module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
 
   firebase: {
-    dashboardUrl:
-      process.env.FIREBASE_DASHBOARD_URL ||
-      'https://console.firebase.google.com/project/YOUR_PROJECT_ID/analytics',
+    dashboardUrl: (() => {
+      let u =
+        process.env.FIREBASE_DASHBOARD_URL ||
+        'https://console.firebase.google.com/project/YOUR_PROJECT_ID/analytics/dashboard';
+      u = u.trim().replace(/\/$/, ''); // strip trailing slash
+      // Ensure we land on the realtime dashboard, not the overview redirect
+      if (u.endsWith('/analytics')) return u + '/dashboard';
+      if (u.endsWith('/overview')) return u.replace('/overview', '/dashboard');
+      return u;
+    })(),
   },
 
   browser: {

@@ -82,29 +82,82 @@ async function captureOnce() {
     });
 
     while (Date.now() - startTime < timeoutMs) {
-      // 1. Direct page search: candidate containers with "30 minutes"
-      try {
-        const candidates = [
-          page.locator('div, section, ga-card, mat-card').filter({ hasText: /30 minutes/i }).last(),
-          page.getByText(/active users in last 30 minutes/i).first(),
-          page.getByText(/30 minutes/i).first(),
-          page.locator('[data-guidedhelpid="realtime"]').first(),
-        ];
+      // Strategy: find the SMALLEST visible element that contains "30 minutes"
+      // then walk up to its nearest card/widget ancestor with a reasonable bounding box.
+      // This avoids matching huge ancestor containers that swallow the whole page.
 
-        for (const el of candidates) {
-          if (await el.isVisible({ timeout: 1000 }).catch(() => false)) {
-            // Find enclosing card box
-            const box = el.locator('xpath=ancestor-or-self::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card or contains(@style, "border")][1]').first();
-            if (await box.isVisible({ timeout: 500 }).catch(() => false)) {
-              const bbox = await box.boundingBox().catch(() => null);
-              if (bbox && bbox.width >= 150 && bbox.height >= 100) {
-                targetCard = box;
-                log('info', 'Located Active Users card widget on main page');
-                break;
-              }
+      // 1a. Try the precise ga-card realtime data-attribute (most reliable)
+      try {
+        const realtimeCard = page.locator('[data-guidedhelpid="realtime"]').first();
+        if (await realtimeCard.isVisible({ timeout: 1500 }).catch(() => false)) {
+          targetCard = realtimeCard;
+          log('info', 'Located Active Users card via data-guidedhelpid=realtime');
+        }
+      } catch (_) {}
+      if (targetCard) break;
+
+      // 1b. Find text leaf, then walk up to find a card-sized ancestor
+      try {
+        // getByText finds the innermost element with the text
+        const textEl = page.getByText(/ACTIVE USERS IN LAST 30 MINUTES/i).first();
+        if (await textEl.isVisible({ timeout: 1500 }).catch(() => false)) {
+          // Walk up XPath to find nearest element >= 200px wide and >= 150px tall
+          // that is smaller than the viewport width (excludes full-page containers)
+          const cardAncestor = textEl.locator(
+            'xpath=ancestor-or-self::*[self::ga-card or self::mat-card or ' +
+            'contains(concat(" ",normalize-space(@class)," ")," card ") or ' +
+            'contains(concat(" ",normalize-space(@class)," ")," widget ")][1]'
+          ).first();
+          if (await cardAncestor.isVisible({ timeout: 500 }).catch(() => false)) {
+            const bbox = await cardAncestor.boundingBox().catch(() => null);
+            if (bbox && bbox.width >= 150 && bbox.height >= 120 && bbox.width < 1200) {
+              targetCard = cardAncestor;
+              log('info', 'Located Active Users card via text ancestor walk', { w: bbox.width, h: bbox.height });
             }
-            targetCard = el;
-            break;
+          }
+          if (!targetCard) {
+            // Fallback: use the text element's parent (one level up)
+            const parentEl = textEl.locator('xpath=..').first();
+            const pbox = await parentEl.boundingBox().catch(() => null);
+            if (pbox && pbox.width >= 150 && pbox.height >= 50) {
+              targetCard = parentEl;
+              log('info', 'Located Active Users card via text parent');
+            } else {
+              targetCard = textEl;
+              log('info', 'Using text element itself as card target');
+            }
+          }
+        }
+      } catch (_) {}
+      if (targetCard) break;
+
+      // 1c. Broader "30 minutes" text search — find smallest matching element
+      try {
+        const els = page.locator('h2, h3, h4, span, p, div.card-title, div.metric-label')
+          .filter({ hasText: /30 minutes/i });
+        const count = await els.count().catch(() => 0);
+        for (let i = 0; i < count; i++) {
+          const el = els.nth(i);
+          if (await el.isVisible({ timeout: 500 }).catch(() => false)) {
+            const bbox = await el.boundingBox().catch(() => null);
+            if (bbox && bbox.width < 1000) { // skip full-width containers
+              // Walk up to card ancestor
+              const cardAncestor = el.locator(
+                'xpath=ancestor-or-self::*[self::ga-card or self::mat-card or ' +
+                'contains(concat(" ",normalize-space(@class)," ")," card ")][1]'
+              ).first();
+              if (await cardAncestor.isVisible({ timeout: 300 }).catch(() => false)) {
+                const cbox = await cardAncestor.boundingBox().catch(() => null);
+                if (cbox && cbox.width >= 150 && cbox.width < 1200) {
+                  targetCard = cardAncestor;
+                  log('info', 'Located Active Users card via broader search', { w: cbox.width, h: cbox.height });
+                  break;
+                }
+              }
+              targetCard = el;
+              log('info', 'Using 30-minutes label element as target');
+              break;
+            }
           }
         }
       } catch (_) {}
@@ -124,7 +177,7 @@ async function captureOnce() {
       }
       if (targetCard) break;
 
-      await page.waitForTimeout(1000);
+      await page.waitForTimeout(1500);
     }
 
     if (!targetCard) {
