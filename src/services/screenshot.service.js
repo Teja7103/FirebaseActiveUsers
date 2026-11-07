@@ -71,36 +71,77 @@ async function captureOnce() {
       );
     }
 
-    // The Firebase Analytics dashboard embeds Google Analytics inside an iframe
-    const frame = page.frameLocator('iframe').first();
+    // Find Active Users card on page or in iframe
+    let targetCard = null;
+    const startTime = Date.now();
+    const timeoutMs = config.browser.cardWaitTimeout;
 
-    // Specifically target the Realtime Active Users in last 30 minutes card
-    const realtimeCard = frame
-      .locator('ga-card[data-guidedhelpid="realtime"], ga-card')
-      .filter({ hasText: '30 minutes' })
-      .first();
-
-    let buffer;
-    try {
-      await realtimeCard.waitFor({ state: 'visible', timeout: config.browser.cardWaitTimeout });
-      buffer = await realtimeCard.screenshot();
-    } catch (selectorErr) {
+    while (Date.now() - startTime < timeoutMs) {
+      // 1. Direct page search: container with "30 minutes" and realtime details
       try {
-        // Fallback 1: configured cardSelector
-        const configCard = frame.locator(config.browser.cardSelector).first();
-        await configCard.waitFor({ state: 'visible', timeout: 15000 });
-        buffer = await configCard.screenshot();
-      } catch (err2) {
-        // Fallback 2: text locator with parent card container
-        const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
-        await textCard.waitFor({ state: 'visible', timeout: 20000 });
-        const parentCard = textCard
-          .locator('xpath=ancestor::ga-card[1] | ancestor::div[contains(@class, "card")][1]')
-          .first();
-        const target = (await parentCard.isVisible().catch(() => false)) ? parentCard : textCard;
-        buffer = await target.screenshot();
+        const card = page
+          .locator('ga-card, mat-card, section, div')
+          .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
+          .filter({ hasText: /per minute|view realtime|top countries/i })
+          .last();
+
+        if (await card.isVisible({ timeout: 1000 }).catch(() => false)) {
+          targetCard = card;
+          log('info', 'Located Active Users card on main page');
+          break;
+        }
+      } catch (_) {}
+
+      // 2. Direct page search by title and ancestor
+      try {
+        const heading = page.getByText(/active users in last 30 minutes/i).first();
+        if (await heading.isVisible({ timeout: 1000 }).catch(() => false)) {
+          const ancestor = heading
+            .locator('xpath=ancestor::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card][1]')
+            .first();
+          targetCard = (await ancestor.isVisible({ timeout: 500 }).catch(() => false)) ? ancestor : heading;
+          log('info', 'Located Active Users card via heading ancestor on main page');
+          break;
+        }
+      } catch (_) {}
+
+      // 3. Search inside any iframes
+      for (const frame of page.frames()) {
+        try {
+          const card = frame
+            .locator('ga-card, mat-card, section, div')
+            .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
+            .filter({ hasText: /per minute|view realtime|top countries/i })
+            .last();
+
+          if (await card.isVisible({ timeout: 500 }).catch(() => false)) {
+            targetCard = card;
+            log('info', 'Located Active Users card inside iframe');
+            break;
+          }
+        } catch (_) {}
+
+        try {
+          const heading = frame.getByText(/active users in last 30 minutes/i).first();
+          if (await heading.isVisible({ timeout: 500 }).catch(() => false)) {
+            const ancestor = heading
+              .locator('xpath=ancestor::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card][1]')
+              .first();
+            targetCard = (await ancestor.isVisible({ timeout: 500 }).catch(() => false)) ? ancestor : heading;
+            break;
+          }
+        } catch (_) {}
       }
+      if (targetCard) break;
+
+      await page.waitForTimeout(1000);
     }
+
+    if (!targetCard) {
+      throw new Error('Active Users in last 30 minutes card was not found on the page within timeout.');
+    }
+
+    const buffer = await targetCard.screenshot();
 
     cacheBuffer = buffer;
     cacheCapturedAt = new Date().toISOString();
