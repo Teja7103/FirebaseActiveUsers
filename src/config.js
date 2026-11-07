@@ -7,21 +7,9 @@ module.exports = {
   port: parseInt(process.env.PORT || '3000', 10),
 
   firebase: {
-    dashboardUrl: (() => {
-      let u =
-        process.env.FIREBASE_DASHBOARD_URL ||
-        'https://console.firebase.google.com/project/YOUR_PROJECT_ID/analytics/dashboard';
-      u = u.trim();
-      // If URL points to /analytics or /analytics/, Firebase redirects to /overview.
-      // Normalize to /analytics/dashboard so the real-time GA card loads.
-      if (u.endsWith('/analytics')) {
-        return u + '/dashboard';
-      }
-      if (u.endsWith('/analytics/')) {
-        return u + 'dashboard';
-      }
-      return u;
-    })(),
+    dashboardUrl:
+      process.env.FIREBASE_DASHBOARD_URL ||
+      'https://console.firebase.google.com/project/YOUR_PROJECT_ID/analytics',
   },
 
   browser: {

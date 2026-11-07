@@ -273,6 +273,16 @@ async function finishInteractiveSession() {
     });
     await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
 
+    // Allow background SSO handshakes to complete
+    if (page.url().includes('accounts.google.com') && !page.url().includes('/signin') && !page.url().includes('/ServiceLogin')) {
+      await page.waitForURL((url) => !url.href.includes('accounts.google.com'), { timeout: 15000 }).catch(() => {});
+    }
+
+    log('info', 'Page reached during verification', {
+      currentUrl: page.url(),
+      title: await page.title().catch(() => ''),
+    });
+
     // Check if page redirected back to Google sign-in
     const afterNavUrl = page.url();
     if (isOnGoogleAuthFlow(afterNavUrl)) {
@@ -288,43 +298,32 @@ async function finishInteractiveSession() {
     const timeoutMs = Math.min(config.browser.cardWaitTimeout, 45000);
 
     while (Date.now() - startTime < timeoutMs) {
-      // 1. Direct page search: look for container having "30 minutes" and realtime details
+      // 1. Direct page search: container with "30 minutes"
       try {
-        const card = page
-          .locator('ga-card, mat-card, section, div')
-          .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
-          .filter({ hasText: /per minute|view realtime|top countries/i })
-          .last();
+        const candidates = [
+          page.locator('div, section, ga-card, mat-card').filter({ hasText: /30 minutes/i }).last(),
+          page.getByText(/active users in last 30 minutes/i).first(),
+          page.getByText(/30 minutes/i).first(),
+          page.locator('[data-guidedhelpid="realtime"]').first(),
+        ];
 
-        if (await card.isVisible({ timeout: 1000 }).catch(() => false)) {
-          cardFound = true;
-          log('info', 'Verified Active Users card on main page');
-          break;
+        for (const el of candidates) {
+          if (await el.isVisible({ timeout: 1000 }).catch(() => false)) {
+            cardFound = true;
+            log('info', 'Verified Active Users card on main page');
+            break;
+          }
         }
       } catch (_) {}
+      if (cardFound) break;
 
-      // 2. Direct page search by heading text
-      try {
-        const heading = page.getByText(/active users in last 30 minutes/i).first();
-        if (await heading.isVisible({ timeout: 1000 }).catch(() => false)) {
-          cardFound = true;
-          log('info', 'Verified Active Users card via heading text on main page');
-          break;
-        }
-      } catch (_) {}
-
-      // 3. Search inside frames
+      // 2. Search inside frames
       for (const frame of page.frames()) {
         try {
-          const card = frame
-            .locator('ga-card, mat-card, section, div')
-            .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
-            .filter({ hasText: /per minute|view realtime|top countries/i })
-            .last();
-
-          if (await card.isVisible({ timeout: 500 }).catch(() => false)) {
+          const frameEl = frame.getByText(/30 minutes/i).first();
+          if (await frameEl.isVisible({ timeout: 500 }).catch(() => false)) {
             cardFound = true;
-            log('info', 'Verified Active Users card inside iframe');
+            log('info', 'Verified Active Users card inside frame');
             break;
           }
         } catch (_) {}

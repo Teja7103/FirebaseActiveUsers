@@ -76,58 +76,48 @@ async function captureOnce() {
     const startTime = Date.now();
     const timeoutMs = config.browser.cardWaitTimeout;
 
+    log('info', 'Page reached for capture', {
+      currentUrl: page.url(),
+      title: await page.title().catch(() => ''),
+    });
+
     while (Date.now() - startTime < timeoutMs) {
-      // 1. Direct page search: container with "30 minutes" and realtime details
+      // 1. Direct page search: candidate containers with "30 minutes"
       try {
-        const card = page
-          .locator('ga-card, mat-card, section, div')
-          .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
-          .filter({ hasText: /per minute|view realtime|top countries/i })
-          .last();
+        const candidates = [
+          page.locator('div, section, ga-card, mat-card').filter({ hasText: /30 minutes/i }).last(),
+          page.getByText(/active users in last 30 minutes/i).first(),
+          page.getByText(/30 minutes/i).first(),
+          page.locator('[data-guidedhelpid="realtime"]').first(),
+        ];
 
-        if (await card.isVisible({ timeout: 1000 }).catch(() => false)) {
-          targetCard = card;
-          log('info', 'Located Active Users card on main page');
-          break;
-        }
-      } catch (_) {}
-
-      // 2. Direct page search by title and ancestor
-      try {
-        const heading = page.getByText(/active users in last 30 minutes/i).first();
-        if (await heading.isVisible({ timeout: 1000 }).catch(() => false)) {
-          const ancestor = heading
-            .locator('xpath=ancestor::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card][1]')
-            .first();
-          targetCard = (await ancestor.isVisible({ timeout: 500 }).catch(() => false)) ? ancestor : heading;
-          log('info', 'Located Active Users card via heading ancestor on main page');
-          break;
-        }
-      } catch (_) {}
-
-      // 3. Search inside any iframes
-      for (const frame of page.frames()) {
-        try {
-          const card = frame
-            .locator('ga-card, mat-card, section, div')
-            .filter({ hasText: /active users in last 30 minutes|users in last 30 minutes/i })
-            .filter({ hasText: /per minute|view realtime|top countries/i })
-            .last();
-
-          if (await card.isVisible({ timeout: 500 }).catch(() => false)) {
-            targetCard = card;
-            log('info', 'Located Active Users card inside iframe');
+        for (const el of candidates) {
+          if (await el.isVisible({ timeout: 1000 }).catch(() => false)) {
+            // Find enclosing card box
+            const box = el.locator('xpath=ancestor-or-self::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card or contains(@style, "border")][1]').first();
+            if (await box.isVisible({ timeout: 500 }).catch(() => false)) {
+              const bbox = await box.boundingBox().catch(() => null);
+              if (bbox && bbox.width >= 150 && bbox.height >= 100) {
+                targetCard = box;
+                log('info', 'Located Active Users card widget on main page');
+                break;
+              }
+            }
+            targetCard = el;
             break;
           }
-        } catch (_) {}
+        }
+      } catch (_) {}
+      if (targetCard) break;
 
+      // 2. Search inside frames
+      for (const frame of page.frames()) {
         try {
-          const heading = frame.getByText(/active users in last 30 minutes/i).first();
-          if (await heading.isVisible({ timeout: 500 }).catch(() => false)) {
-            const ancestor = heading
-              .locator('xpath=ancestor::*[contains(@class, "card") or contains(@class, "widget") or self::ga-card or self::mat-card][1]')
-              .first();
-            targetCard = (await ancestor.isVisible({ timeout: 500 }).catch(() => false)) ? ancestor : heading;
+          const frameEl = frame.getByText(/30 minutes/i).first();
+          if (await frameEl.isVisible({ timeout: 500 }).catch(() => false)) {
+            const box = frameEl.locator('xpath=ancestor-or-self::*[contains(@class, "card") or self::ga-card][1]').first();
+            targetCard = (await box.isVisible({ timeout: 500 }).catch(() => false)) ? box : frameEl;
+            log('info', 'Located Active Users card inside frame');
             break;
           }
         } catch (_) {}
