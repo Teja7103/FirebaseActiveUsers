@@ -1,0 +1,17 @@
+node_modules
+npm-debug.log
+.env
+.env.*
+!.env.example
+.git
+.gitignore
+browser-profile
+google-auth-state.json
+screenshots
+session-backups
+*.log
+.DS_Store
+Thumbs.db
+Dockerfile
+.dockerignore
+README.md
