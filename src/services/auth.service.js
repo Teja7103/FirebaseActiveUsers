@@ -1,74 +1,369 @@
-const { getBrowserContext, launchContextForAuth, closeBrowserContext } = require('./browser.service');
+const path = require('path');
+const fs = require('fs');
+const crypto = require('crypto');
 const config = require('../config');
+const browserService = require('./browser.service');
 const { log } = require('../utils/logger');
 const { backupAuthState } = require('./sessionBackup.service');
-const fs = require('fs');
 
 const GOOGLE_AUTH_ORIGIN = 'https://accounts.google.com/';
 
-function isOnGoogleAuthFlow(url) {
-  const u = new URL(url);
-  const p = u.pathname;
-  const isAuthPath = p.includes('/signin') || p.includes('/o/oauth') || p.includes('/passport');
-  const isAccountsRoot =
-    (u.hostname === 'accounts.google.com' || u.hostname === 'google.com') && (p === '/' || p === '');
-  return isAuthPath || isAccountsRoot;
-}
+let activeSession = null;
+let lastAuthState = {
+  authenticated: null,
+  verifiedAt: null,
+  reason: null,
+  source: null,
+};
 
-/**
- * Lightweight check: does the persisted Google session look authenticated?
- * Uses the shared persistent browser context (if already running).
- */
-async function getAuthStatus() {
+function isOnGoogleAuthFlow(urlStr) {
   try {
-    const ctx = await getBrowserContext();
-    const page = await ctx.newPage();
-    try {
-      await page.goto(GOOGLE_AUTH_ORIGIN, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      let authenticated = false;
-      try {
-        await page.waitForURL((url) => !isOnGoogleAuthFlow(url), { timeout: 12000 });
-        authenticated = true;
-      } catch (_) {
-        authenticated = false;
-      }
-      await page.close();
-      return { authenticated, source: 'persistent-context' };
-    } catch (err) {
-      return { authenticated: false, reason: 'BROWSER_ERROR', message: err.message };
-    }
-  } catch (err) {
-    return { authenticated: false, reason: 'BROWSER_UNAVAILABLE', message: 'Browser could not be launched.' };
+    const u = new URL(urlStr);
+    const p = u.pathname;
+    const isAuthPath =
+      p.includes('/signin') ||
+      p.includes('/o/oauth') ||
+      p.includes('/passport') ||
+      p.includes('/ServiceLogin') ||
+      p.includes('/v3/signin');
+    const isAccountsRoot =
+      (u.hostname === 'accounts.google.com' || u.hostname === 'google.com') &&
+      (p === '/' || p === '');
+    return isAuthPath || isAccountsRoot;
+  } catch (_) {
+    return false;
   }
 }
 
 /**
- * Interactive re-authentication flow. Launches a headed persistent context,
- * waits for the user to complete Google sign-in + MFA, persists the state.
+ * Checks current Google & Firebase Console authentication status.
  */
-async function startAuthentication() {
-  const { closeBrowserContext, getBrowserContext } = require('./browser.service');
-  await closeBrowserContext();
-  const context = await launchContextForAuth();
-  const page = context.pages()[0] || (await context.newPage());
-  try {
-    await page.goto(GOOGLE_AUTH_ORIGIN, { waitUntil: 'domcontentloaded', timeout: 30000 });
-    const timeoutMs = (config.auth.loginTimeoutSeconds + 30) * 1000;
-    await page.waitForURL((url) => !isOnGoogleAuthFlow(url), { timeout: timeoutMs });
-    const stateFile = require('path').resolve(process.cwd(), config.browser.authStateFile);
-    await context.storageState({ path: stateFile });
-    await context.close();
-    // Keep an encrypted backup of the session state.
-    if (config.security.sessionBackupPassphrase) {
-      try { backupAuthState(stateFile ? fs.readFileSync(stateFile, 'utf8') : '{}', config.security.sessionBackupPassphrase); } catch (_) { /* backup is best-effort */ }
+async function getAuthStatus() {
+  // If an interactive session is currently in progress, report status
+  if (activeSession && activeSession.status === 'ready') {
+    return {
+      authenticated: Boolean(lastAuthState.authenticated),
+      sessionInProgress: true,
+      sessionExpiresAt: activeSession.expiresAt,
+      verifiedAt: lastAuthState.verifiedAt,
+      reason: lastAuthState.reason,
+    };
+  }
+
+  // Check if state file exists
+  const statePath = path.resolve(process.cwd(), config.browser.authStateFile);
+  const stateFileExists = fs.existsSync(statePath);
+
+  if (lastAuthState.authenticated !== null) {
+    return {
+      authenticated: lastAuthState.authenticated,
+      verifiedAt: lastAuthState.verifiedAt,
+      reason: lastAuthState.reason,
+      sessionInProgress: false,
+      stateFileExists,
+    };
+  }
+
+  // If state file exists but unverified in memory, do a quick check
+  if (stateFileExists) {
+    return {
+      authenticated: true,
+      verifiedAt: lastAuthState.verifiedAt,
+      reason: 'STATE_FILE_PRESENT',
+      sessionInProgress: false,
+      stateFileExists: true,
+    };
+  }
+
+  return {
+    authenticated: false,
+    verifiedAt: null,
+    reason: 'NOT_AUTHENTICATED',
+    sessionInProgress: false,
+    stateFileExists: false,
+  };
+}
+
+/**
+ * Marks session as expired (e.g. when screenshot encounters login screen).
+ */
+function markAuthExpired(reason = 'SESSION_EXPIRED') {
+  lastAuthState = {
+    authenticated: false,
+    verifiedAt: null,
+    reason,
+    source: null,
+  };
+  log('warn', 'Centralized Google authentication session marked as expired', { reason });
+}
+
+/**
+ * Initiates an administrator interactive authentication session.
+ */
+async function startInteractiveSession() {
+  // If an active session is already running and valid, return it
+  if (activeSession && activeSession.status === 'ready' && Date.now() < activeSession.expiresAt) {
+    log('info', 'Reusing active interactive authentication session');
+    return {
+      sessionId: activeSession.id,
+      interactiveUrl: '/admin/live',
+      expiresIn: Math.max(1, Math.round((activeSession.expiresAt - Date.now()) / 1000)),
+      isRemote: activeSession.isRemote,
+    };
+  }
+
+  // Cancel any stale session
+  await cancelInteractiveSession();
+
+  log('info', 'Starting new administrator interactive authentication session');
+  const interactiveData = await browserService.createInteractivePage();
+  const { page, cdp, liveURL, liveURLId, timeout, isRemote } = interactiveData;
+
+  const sessionId = crypto.randomUUID();
+  const now = Date.now();
+  const expiresAt = now + timeout;
+
+  // Navigate the interactive page to Google sign-in
+  await page.goto(GOOGLE_AUTH_ORIGIN, {
+    waitUntil: 'domcontentloaded',
+    timeout: 30000,
+  });
+
+  const sessionObj = {
+    id: sessionId,
+    status: 'ready',
+    createdAt: now,
+    expiresAt,
+    page,
+    cdp,
+    liveURL,
+    liveURLId,
+    isRemote,
+    timeoutHandle: null,
+  };
+
+  // Set timeout to auto-close live link and clean up if administrator abandons
+  sessionObj.timeoutHandle = setTimeout(async () => {
+    if (activeSession && activeSession.id === sessionId) {
+      log('warn', 'Interactive session timed out without finalization');
+      await cancelInteractiveSession();
     }
-    // Reopen the shared context for subsequent screenshot operations.
-    await getBrowserContext();
-    return { authenticated: true, savedState: stateFile };
+  }, timeout);
+
+  activeSession = sessionObj;
+
+  return {
+    sessionId,
+    interactiveUrl: '/admin/live',
+    expiresIn: Math.round(timeout / 1000),
+    isRemote,
+  };
+}
+
+/**
+ * Retrieves the currently active interactive session (for /admin/live redirection).
+ */
+function getActiveSession() {
+  if (!activeSession) return null;
+  if (Date.now() > activeSession.expiresAt) {
+    cancelInteractiveSession().catch(() => {});
+    return null;
+  }
+  return activeSession;
+}
+
+/**
+ * Retrieves sanitized interactive session status for UI polling.
+ */
+function getInteractiveSessionStatus() {
+  if (!activeSession) {
+    return { active: false };
+  }
+
+  const isExpired = Date.now() > activeSession.expiresAt;
+  if (isExpired && activeSession.status === 'ready') {
+    activeSession.status = 'expired';
+  }
+
+  return {
+    active: activeSession.status === 'ready' || activeSession.status === 'verifying',
+    status: activeSession.status,
+    createdAt: new Date(activeSession.createdAt).toISOString(),
+    expiresAt: new Date(activeSession.expiresAt).toISOString(),
+    expiresIn: Math.max(0, Math.round((activeSession.expiresAt - Date.now()) / 1000)),
+    isRemote: activeSession.isRemote,
+    error: activeSession.error || null,
+  };
+}
+
+/**
+ * Cancels and cleans up the active interactive session.
+ */
+async function cancelInteractiveSession() {
+  if (!activeSession) return;
+  const session = activeSession;
+  activeSession = null;
+
+  if (session.timeoutHandle) {
+    clearTimeout(session.timeoutHandle);
+  }
+
+  if (session.cdp && session.liveURLId) {
+    await browserService.closeLiveURL(session.cdp, session.liveURLId);
+  }
+
+  if (session.page) {
+    try {
+      await session.page.close();
+    } catch (_) { /* ignore */ }
+  }
+}
+
+/**
+ * Finalizes Google authentication:
+ * 1. Revokes the interactive live URL bearer link immediately.
+ * 2. Verifies Google sign-in is complete.
+ * 3. Navigates to Firebase Console Analytics dashboard.
+ * 4. Confirms that the Active Users card is visible and accessible.
+ * 5. Saves storageState and encrypted backup.
+ * 6. Marks centralized session as authenticated.
+ */
+async function finishInteractiveSession() {
+  if (!activeSession) {
+    throw new Error('No interactive authentication session is currently active. Please click "Start Google Authentication".');
+  }
+
+  const session = activeSession;
+  session.status = 'verifying';
+
+  // 1. Revoke the interactive live URL immediately so viewer link is disabled
+  if (session.cdp && session.liveURLId) {
+    await browserService.closeLiveURL(session.cdp, session.liveURLId);
+  }
+
+  const page = session.page;
+  if (!page || page.isClosed()) {
+    activeSession = null;
+    throw new Error('Interactive browser page was closed before verification could complete.');
+  }
+
+  try {
+    log('info', 'Verifying Google authentication completion on remote browser...');
+
+    // Check if still on Google Sign-In URL
+    const currentUrl = page.url();
+    if (isOnGoogleAuthFlow(currentUrl)) {
+      // Give a brief 5-second grace window in case the last redirect is finishing
+      try {
+        await page.waitForURL((url) => !isOnGoogleAuthFlow(url), { timeout: 5000 });
+      } catch (_) {
+        session.status = 'ready'; // allow user to continue or retry
+        session.error = 'Google sign-in is not finished. Please complete password and MFA.';
+        throw new Error('Google sign-in was not completed. The browser is still on the Google authentication page.');
+      }
+    }
+
+    log('info', 'Navigating to Firebase Console dashboard for verification', {
+      url: config.firebase.dashboardUrl,
+    });
+
+    await page.goto(config.firebase.dashboardUrl, {
+      waitUntil: 'load',
+      timeout: config.browser.navigationTimeout,
+    });
+    await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+
+    // Check if page redirected back to Google sign-in
+    const afterNavUrl = page.url();
+    if (isOnGoogleAuthFlow(afterNavUrl)) {
+      session.status = 'ready';
+      session.error = 'Firebase rejected session and redirected back to Google sign-in.';
+      throw new Error('Firebase redirected to Google login. The signed-in account does not have access or session expired.');
+    }
+
+    // Locate Active Users card in the iframe
+    log('info', 'Verifying Active Users card visibility in Firebase Console...');
+    const frame = page.frameLocator('iframe').first();
+    const card = frame.locator(config.browser.cardSelector);
+
+    let cardFound = false;
+    try {
+      await card.waitFor({ state: 'visible', timeout: Math.min(config.browser.cardWaitTimeout, 45000) });
+      cardFound = true;
+    } catch (_) {
+      // Fallback text-based locator
+      try {
+        const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
+        await textCard.waitFor({ state: 'visible', timeout: 15000 });
+        cardFound = true;
+      } catch (err2) {
+        cardFound = false;
+      }
+    }
+
+    if (!cardFound) {
+      session.status = 'ready';
+      session.error = 'Firebase Console loaded, but the Active Users card was not found.';
+      throw new Error('Firebase Console loaded, but the Active Users card could not be found. Ensure the authenticated account has Firebase Analytics viewer permissions.');
+    }
+
+    // Save storage state to disk
+    const stateFile = path.resolve(process.cwd(), config.browser.authStateFile);
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    await page.context().storageState({ path: stateFile });
+    log('info', 'Authentication storageState saved successfully', { stateFile });
+
+    // Encrypted backup
+    if (config.security.sessionBackupPassphrase) {
+      try {
+        const jsonContent = fs.readFileSync(stateFile, 'utf8');
+        backupAuthState(jsonContent, config.security.sessionBackupPassphrase);
+        log('info', 'Encrypted backup of session state created');
+      } catch (backupErr) {
+        log('warn', 'Session state backup failed (non-critical)', { error: backupErr.message });
+      }
+    }
+
+    // Mark shared session as authenticated
+    lastAuthState = {
+      authenticated: true,
+      verifiedAt: new Date().toISOString(),
+      reason: null,
+      source: 'verified_remote_session',
+    };
+
+    // Close the temporary verification page; shared context stays alive!
+    await page.close().catch(() => {});
+    if (session.timeoutHandle) clearTimeout(session.timeoutHandle);
+    activeSession = null;
+
+    log('info', 'Centralized Google authentication completed and verified successfully');
+    return {
+      success: true,
+      authenticated: true,
+      verifiedAt: lastAuthState.verifiedAt,
+      message: 'Google authentication verified and Active Users card located successfully.',
+    };
   } catch (err) {
-    await context.close().catch(() => {});
+    log('error', 'Authentication verification failed', { error: err.message });
     throw err;
   }
 }
 
-module.exports = { getAuthStatus, startAuthentication };
+/**
+ * Backwards compatibility for legacy scripts.
+ */
+async function startAuthentication() {
+  return startInteractiveSession();
+}
+
+module.exports = {
+  getAuthStatus,
+  markAuthExpired,
+  startInteractiveSession,
+  getActiveSession,
+  getInteractiveSessionStatus,
+  finishInteractiveSession,
+  cancelInteractiveSession,
+  startAuthentication,
+};

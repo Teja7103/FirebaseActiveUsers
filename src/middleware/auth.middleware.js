@@ -1,12 +1,6 @@
 const crypto = require('crypto');
 const config = require('../config');
-
-function tokensMatch(provided, expected) {
-  const a = Buffer.from(String(provided || ''));
-  const b = Buffer.from(String(expected || ''));
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
-}
+const { isAuthenticatedAdmin, validateCsrf, tokensMatch } = require('./adminSession.middleware');
 
 /**
  * Protects screenshot endpoints with the application-level access token.
@@ -25,19 +19,27 @@ function requireScreenshotToken(req, res, next) {
 }
 
 /**
- * Protects administrative operations (e.g. POST /auth/start) with the admin token.
- * Expected header: Authorization: Bearer <ADMIN_TOKEN> (or x-admin-token).
+ * Protects administrative operations with the admin token or admin session.
+ * Supports:
+ * - Authorization: Bearer <ADMIN_TOKEN>
+ * - x-admin-token: <ADMIN_TOKEN>
+ * - Admin session cookie (from browser login)
  */
 function requireAdmin(req, res, next) {
-  const header = req.headers.authorization || '';
-  const provided = header.startsWith('Bearer ') ? header.slice(7) : req.headers['x-admin-token'];
-  if (!provided || !tokensMatch(provided, config.security.adminToken)) {
+  const authInfo = isAuthenticatedAdmin(req);
+  if (!authInfo.authenticated) {
     return res.status(401).json({
       error: 'ADMIN_UNAUTHORIZED',
-      message: 'Missing or invalid admin token.',
+      message: 'Missing or invalid admin credentials.',
     });
   }
+
+  // If authenticated via cookie, apply CSRF validation on mutating actions
+  if (authInfo.method === 'cookie') {
+    return validateCsrf(req, res, next);
+  }
+
   next();
 }
 
-module.exports = { requireScreenshotToken, requireAdmin };
+module.exports = { requireScreenshotToken, requireAdmin, tokensMatch };

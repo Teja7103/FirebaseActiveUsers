@@ -34,6 +34,22 @@ module.exports = {
     loginTimeoutSeconds: parseInt(process.env.LOGIN_WAIT_SECONDS || '180', 10),
   },
 
+  browserless: {
+    url: process.env.BROWSERLESS_URL || '',
+    wsEndpoint: process.env.BROWSERLESS_WS_ENDPOINT || '',
+    token: process.env.BROWSERLESS_TOKEN || process.env.BROWSERLESS_API_KEY || '',
+    publicUrl: process.env.BROWSERLESS_PUBLIC_URL || '',
+    liveTimeoutMs: parseInt(process.env.BROWSERLESS_LIVE_TIMEOUT_MS || '300000', 10),
+  },
+
+  admin: {
+    sessionSecret:
+      process.env.ADMIN_SESSION_SECRET ||
+      process.env.ADMIN_TOKEN ||
+      'fallback-admin-session-secret-key-change-in-production',
+    sessionMaxAgeMs: parseInt(process.env.ADMIN_SESSION_MAX_AGE_MS || '86400000', 10),
+  },
+
   security: {
     screenshotApiToken: process.env.SCREENSHOT_API_TOKEN || '',
     adminToken: process.env.ADMIN_TOKEN || '',

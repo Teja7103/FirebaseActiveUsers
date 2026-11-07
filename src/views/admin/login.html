@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>Admin Login - Firebase Screenshot Service</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: #1e293b;
+      --border: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --error: #ef4444;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+    .login-card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 32px 24px;
+      width: 100%;
+      max-width: 420px;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+    .header { text-align: center; margin-bottom: 28px; }
+    .icon { font-size: 40px; margin-bottom: 12px; }
+    h1 { font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+    p.subtitle { color: var(--text-muted); font-size: 14px; line-height: 1.5; }
+    .form-group { margin-bottom: 20px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 8px; color: var(--text); }
+    input[type="password"] {
+      width: 100%;
+      padding: 14px 16px;
+      font-size: 16px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      background: #0f172a;
+      color: #fff;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    input[type="password"]:focus {
+      border-color: var(--primary);
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      font-size: 16px;
+      font-weight: 600;
+      color: #fff;
+      background: var(--primary);
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+      text-align: center;
+      text-decoration: none;
+      min-height: 48px;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--error);
+      color: #fca5a5;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      margin-bottom: 20px;
+      display: none;
+    }
+    .footer {
+      text-align: center;
+      margin-top: 24px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-card">
+    <div class="header">
+      <div class="icon">🔒</div>
+      <h1>Admin Authentication</h1>
+      <p class="subtitle">Enter your Admin Token to access the centralized Google authentication management portal.</p>
+    </div>
+
+    <div id="error-box" class="alert-error"></div>
+
+    <form id="login-form" method="POST" action="/admin/login">
+      <div class="form-group">
+        <label for="adminToken">Admin Token</label>
+        <input
+          id="adminToken"
+          name="adminToken"
+          type="password"
+          placeholder="Enter ADMIN_TOKEN"
+          required
+          autofocus
+          autocomplete="current-password"
+        />
+      </div>
+      <button type="submit" class="btn" id="submit-btn">Sign In to Admin Portal</button>
+    </form>
+
+    <div class="footer">
+      Firebase Active Users Screenshot Service
+    </div>
+  </div>
+
+  <script>
+    const form = document.getElementById('login-form');
+    const errorBox = document.getElementById('error-box');
+    const submitBtn = document.getElementById('submit-btn');
+
+    // Display error if query param error exists
+    const urlParams = new URLSearchParams(window.location.search);
+    if (urlParams.has('error')) {
+      const err = urlParams.get('error');
+      errorBox.textContent = err === 'invalid_token'
+        ? 'Invalid Admin Token. Please verify and try again.'
+        : 'Authentication required. Please sign in with your Admin Token.';
+      errorBox.style.display = 'block';
+    }
+
+    form.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      errorBox.style.display = 'none';
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Verifying...';
+
+      const token = document.getElementById('adminToken').value.trim();
+      try {
+        const res = await fetch('/admin/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ adminToken: token }),
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          errorBox.textContent = data.message || 'Invalid Admin Token.';
+          errorBox.style.display = 'block';
+          submitBtn.disabled = false;
+          submitBtn.textContent = 'Sign In to Admin Portal';
+          return;
+        }
+
+        // On success, redirect to /admin/auth
+        window.location.href = '/admin/auth';
+      } catch (err) {
+        errorBox.textContent = 'Connection error. Please try again.';
+        errorBox.style.display = 'block';
+        submitBtn.disabled = false;
+        submitBtn.textContent = 'Sign In to Admin Portal';
+      }
+    });
+  </script>
+</body>
+</html>

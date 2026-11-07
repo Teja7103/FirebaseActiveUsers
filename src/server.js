@@ -2,6 +2,7 @@ const express = require('express');
 const path = require('path');
 const screenshotRoutes = require('./routes/screenshot.routes');
 const authRoutes = require('./routes/auth.routes');
+const adminRoutes = require('./routes/admin.routes');
 const browserService = require('./services/browser.service');
 const screenshotService = require('./services/screenshot.service');
 const { log } = require('./utils/logger');
@@ -12,6 +13,7 @@ const { rateLimiter } = require('./middleware/rateLimiter');
 const app = express();
 
 app.use(express.json());
+app.use(express.urlencoded({ extended: false }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/health', async (req, res) => {
@@ -46,6 +48,7 @@ app.post('/auth/start', requireAdmin, rateLimiter, async (req, res) => {
   }
 });
 
+app.use('/admin', adminRoutes);
 app.use('/auth', authRoutes);
 app.use('/screenshot', screenshotRoutes);
 

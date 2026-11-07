@@ -6,6 +6,7 @@ screenshots/
 session-backups/
 .env
 .env.*
+*.env
 !.env.example
 *.log
 .DS_Store

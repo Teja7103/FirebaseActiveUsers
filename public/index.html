@@ -20,9 +20,10 @@
       </div>
       <div id="reauth-section" class="hidden">
         <p><strong>Reauthentication required.</strong> Your Google session appears to have expired.</p>
+        <p style="margin: 8px 0;"><a href="/admin/auth" style="color: #60a5fa; font-weight: 600;">Open Admin Authentication Page (/admin/auth) &rarr;</a></p>
         <ol>
-          <li>The administrator should run <code>POST /auth/start</code> with the admin token.</li>
-          <li>Complete the Google sign-in / MFA in the browser window.</li>
+          <li>The administrator should authenticate via <a href="/admin/auth">/admin/auth</a> on desktop or mobile.</li>
+          <li>Or run <code>POST /auth/start</code> with the admin token.</li>
           <li>Come back and capture a screenshot.</li>
         </ol>
         <label for="admin-token">Admin token</label>

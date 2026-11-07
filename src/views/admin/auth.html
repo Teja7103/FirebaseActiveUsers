@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0" />
+  <title>Google Authentication Portal - Admin</title>
+  <style>
+    :root {
+      --bg: #0b0f19;
+      --card-bg: #151d30;
+      --card-border: #23304c;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --accent: #f59e0b;
+      --accent-hover: #d97706;
+      --success: #10b981;
+      --success-hover: #059669;
+      --danger: #ef4444;
+      --radius: 14px;
+      --shadow: 0 10px 30px rgba(0, 0, 0, 0.4);
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 16px 12px 40px;
+    }
+    .container {
+      max-width: 680px;
+      margin: 0 auto;
+    }
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 24px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid var(--card-border);
+    }
+    .logo-group h1 {
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+    .logo-group p {
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+    .logout-btn {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+    .logout-btn:hover {
+      color: var(--text);
+      border-color: var(--text-muted);
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 20px;
+      box-shadow: var(--shadow);
+    }
+    .card-title {
+      font-size: 15px;
+      font-weight: 600;
+      margin-bottom: 14px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    /* Status Banner */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: 600;
+    }
+    .status-badge.authenticated {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.4);
+    }
+    .status-badge.in_progress {
+      background: rgba(245, 158, 11, 0.15);
+      color: #fbbf24;
+      border: 1px solid rgba(245, 158, 11, 0.4);
+    }
+    .status-badge.expired {
+      background: rgba(239, 68, 68, 0.15);
+      color: #f87171;
+      border: 1px solid rgba(239, 68, 68, 0.4);
+    }
+    .status-details {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.6;
+    }
+    .status-details code {
+      background: rgba(255, 255, 255, 0.08);
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 12px;
+      word-break: break-all;
+    }
+
+    /* Steps */
+    .step-card {
+      position: relative;
+      background: #111827;
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 18px;
+      margin-bottom: 16px;
+      transition: all 0.2s;
+    }
+    .step-card.active {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 1px var(--primary);
+    }
+    .step-card.completed {
+      opacity: 0.85;
+      border-color: rgba(16, 185, 129, 0.4);
+    }
+    .step-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 10px;
+    }
+    .step-num {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 28px;
+      height: 28px;
+      background: var(--card-border);
+      color: var(--text);
+      font-weight: 700;
+      font-size: 13px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .step-card.active .step-num {
+      background: var(--primary);
+      color: #fff;
+    }
+    .step-card.completed .step-num {
+      background: var(--success);
+      color: #fff;
+    }
+    .step-title {
+      font-size: 15px;
+      font-weight: 600;
+    }
+    .step-desc {
+      font-size: 13px;
+      color: var(--text-muted);
+      line-height: 1.5;
+      margin-bottom: 14px;
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 14px 20px;
+      font-size: 15px;
+      font-weight: 600;
+      border-radius: 10px;
+      border: none;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s, transform 0.1s;
+      min-height: 50px;
+    }
+    .btn:active { transform: scale(0.99); }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      transform: none;
+    }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+    .btn-accent { background: var(--accent); color: #fff; }
+    .btn-accent:hover:not(:disabled) { background: var(--accent-hover); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-success:hover:not(:disabled) { background: var(--success-hover); }
+    .btn-outline {
+      background: transparent;
+      border: 1px solid var(--card-border);
+      color: var(--text-muted);
+    }
+    .btn-outline:hover:not(:disabled) {
+      color: var(--text);
+      border-color: var(--text-muted);
+    }
+    .btn-sm {
+      padding: 8px 14px;
+      font-size: 13px;
+      min-height: 38px;
+      width: auto;
+    }
+
+    /* Countdown / Info Box */
+    .countdown-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(245, 158, 11, 0.1);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      color: #fbbf24;
+      margin-bottom: 14px;
+    }
+    .timer-text { font-weight: 700; font-family: monospace; font-size: 15px; }
+
+    /* Alerts */
+    .alert {
+      padding: 14px;
+      border-radius: 8px;
+      font-size: 13px;
+      line-height: 1.5;
+      margin-bottom: 16px;
+      display: none;
+    }
+    .alert.show { display: block; }
+    .alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid var(--success);
+      color: #34d399;
+    }
+    .alert-error {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid var(--danger);
+      color: #fca5a5;
+    }
+    .alert-info {
+      background: rgba(59, 130, 246, 0.15);
+      border: 1px solid var(--primary);
+      color: #93c5fd;
+    }
+
+    /* Spinner */
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.3);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Desktop Preview Collapsible */
+    .preview-toggle {
+      margin-top: 12px;
+      text-align: center;
+    }
+    .preview-wrap {
+      margin-top: 14px;
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--card-border);
+      height: 400px;
+      display: none;
+    }
+    .preview-wrap.open { display: block; }
+    .preview-wrap iframe {
+      width: 100%;
+      height: 100%;
+      border: none;
+      background: #fff;
+    }
+
+    .hidden { display: none !important; }
+    .actions-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 20px;
+      padding-top: 14px;
+      border-top: 1px solid var(--card-border);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <div class="logo-group">
+        <h1>Google Authentication</h1>
+        <p>Centralized Session Manager &middot; Admin Only</p>
+      </div>
+      <form method="POST" action="/admin/logout">
+        <button type="submit" class="logout-btn">Sign Out</button>
+      </form>
+    </header>
+
+    <!-- Global Alerts -->
+    <div id="alert-box" class="alert"></div>
+
+    <!-- Status Card -->
+    <section class="card">
+      <div class="card-title">
+        <span>Session Status</span>
+      </div>
+      <div>
+        <span id="status-badge" class="status-badge expired">
+          <span class="dot">●</span> Checking status...
+        </span>
+      </div>
+      <div class="status-details">
+        <div><strong>Firebase Console:</strong> <code id="dashboard-url">Loading...</code></div>
+        <div><strong>Last Verified:</strong> <span id="last-verified-text">Checking...</span></div>
+        <div id="status-reason-wrap" class="hidden"><strong>Reason:</strong> <span id="status-reason"></span></div>
+      </div>
+    </section>
+
+    <!-- Step 1: Start -->
+    <div id="step-1" class="step-card active">
+      <div class="step-header">
+        <div class="step-num">1</div>
+        <div class="step-title">Start Google Authentication</div>
+      </div>
+      <div class="step-desc">
+        Prepares a remote browser session on Browserless and opens the Google login page.
+      </div>
+      <button id="btn-start" type="button" class="btn btn-primary">
+        Start Google Authentication
+      </button>
+    </div>
+
+    <!-- Step 2: Login -->
+    <div id="step-2" class="step-card hidden">
+      <div class="step-header">
+        <div class="step-num">2</div>
+        <div class="step-title">Complete Google Sign-in</div>
+      </div>
+      <div class="step-desc">
+        Open the interactive Browserless window in a new tab. Enter your Google credentials, complete 2FA / MFA / security challenges, then return here.
+      </div>
+
+      <div class="countdown-bar">
+        <span>Interactive session valid for:</span>
+        <span id="session-timer" class="timer-text">--:--</span>
+      </div>
+
+      <a id="btn-open-login" href="/admin/live" target="_blank" rel="noopener noreferrer" class="btn btn-accent">
+        Open Google Login &rarr;
+      </a>
+
+      <!-- Optional desktop iframe preview -->
+      <div class="preview-toggle">
+        <button id="btn-toggle-preview" type="button" class="btn btn-outline btn-sm">
+          Toggle Desktop Preview (Optional)
+        </button>
+      </div>
+      <div id="preview-wrap" class="preview-wrap">
+        <iframe id="preview-iframe" title="Browserless Interactive View"></iframe>
+      </div>
+    </div>
+
+    <!-- Step 3: Finish -->
+    <div id="step-3" class="step-card hidden">
+      <div class="step-header">
+        <div class="step-num">3</div>
+        <div class="step-title">Finish Authentication</div>
+      </div>
+      <div class="step-desc">
+        Once you have completed Google sign-in and MFA in the remote tab, click below. The backend will revoke the public interactive link, navigate to Firebase Console, verify the Active Users card, and save the session.
+      </div>
+      <button id="btn-finish" type="button" class="btn btn-success">
+        Finish Authentication
+      </button>
+    </div>
+
+    <!-- Footer Actions -->
+    <div class="actions-footer">
+      <button id="btn-restart" type="button" class="btn btn-outline btn-sm">
+        Restart Authentication
+      </button>
+      <a href="/" class="logout-btn" style="text-decoration:none;">Go to Screenshot View</a>
+    </div>
+  </div>
+
+  <script>
+    // Elements
+    const alertBox = document.getElementById('alert-box');
+    const statusBadge = document.getElementById('status-badge');
+    const dashboardUrlEl = document.getElementById('dashboard-url');
+    const lastVerifiedEl = document.getElementById('last-verified-text');
+    const statusReasonWrap = document.getElementById('status-reason-wrap');
+    const statusReasonEl = document.getElementById('status-reason');
+
+    const step1 = document.getElementById('step-1');
+    const step2 = document.getElementById('step-2');
+    const step3 = document.getElementById('step-3');
+
+    const btnStart = document.getElementById('btn-start');
+    const btnOpenLogin = document.getElementById('btn-open-login');
+    const btnFinish = document.getElementById('btn-finish');
+    const btnRestart = document.getElementById('btn-restart');
+
+    const sessionTimerEl = document.getElementById('session-timer');
+    const btnTogglePreview = document.getElementById('btn-toggle-preview');
+    const previewWrap = document.getElementById('preview-wrap');
+    const previewIframe = document.getElementById('preview-iframe');
+
+    let timerInterval = null;
+    let pollInterval = null;
+    let expiresAtEpoch = null;
+
+    // Helper: read CSRF cookie
+    function getCsrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)admin_csrf=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : '';
+    }
+
+    function showAlert(msg, type = 'info') {
+      alertBox.textContent = msg;
+      alertBox.className = `alert alert-${type} show`;
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function clearAlert() {
+      alertBox.className = 'alert';
+      alertBox.textContent = '';
+    }
+
+    function updateTimer() {
+      if (!expiresAtEpoch) return;
+      const remainingSec = Math.max(0, Math.floor((expiresAtEpoch - Date.now()) / 1000));
+      const m = Math.floor(remainingSec / 60);
+      const s = remainingSec % 60;
+      sessionTimerEl.textContent = `${m}:${s < 10 ? '0' : ''}${s}`;
+      if (remainingSec <= 0) {
+        clearInterval(timerInterval);
+        showAlert('Interactive authentication session expired. Please click Restart Authentication.', 'error');
+        btnOpenLogin.classList.add('disabled');
+      }
+    }
+
+    function startCountdown(seconds) {
+      if (timerInterval) clearInterval(timerInterval);
+      expiresAtEpoch = Date.now() + seconds * 1000;
+      updateTimer();
+      timerInterval = setInterval(updateTimer, 1000);
+    }
+
+    // Refresh overall auth status
+    async function loadStatus() {
+      try {
+        const res = await fetch('/admin/api/status');
+        if (res.status === 401) {
+          window.location.href = '/admin/auth?error=unauthorized';
+          return;
+        }
+        const data = await res.json();
+
+        dashboardUrlEl.textContent = data.dashboardUrl || 'Not configured';
+        lastVerifiedEl.textContent = data.lastVerifiedAt
+          ? new Date(data.lastVerifiedAt).toLocaleString()
+          : 'Never';
+
+        if (data.reason) {
+          statusReasonWrap.classList.remove('hidden');
+          statusReasonEl.textContent = data.reason;
+        } else {
+          statusReasonWrap.classList.add('hidden');
+        }
+
+        if (data.sessionInProgress) {
+          statusBadge.className = 'status-badge in_progress';
+          statusBadge.innerHTML = '● Google Login Session Active';
+          step1.classList.remove('active');
+          step1.classList.add('completed');
+          step2.classList.remove('hidden');
+          step2.classList.add('active');
+          step3.classList.remove('hidden');
+          step3.classList.add('active');
+        } else if (data.authenticated) {
+          statusBadge.className = 'status-badge authenticated';
+          statusBadge.innerHTML = '● Authenticated & Ready';
+        } else {
+          statusBadge.className = 'status-badge expired';
+          statusBadge.innerHTML = '● Session Expired / Not Authenticated';
+        }
+      } catch (err) {
+        console.error('Failed to load status', err);
+      }
+    }
+
+    // Check active interactive session status
+    async function checkInteractiveSession() {
+      try {
+        const res = await fetch('/admin/api/session/status');
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (data.active && data.status === 'ready') {
+          step1.classList.remove('active');
+          step1.classList.add('completed');
+          step2.classList.remove('hidden');
+          step2.classList.add('active');
+          step3.classList.remove('hidden');
+          step3.classList.add('active');
+          if (data.expiresIn > 0 && !timerInterval) {
+            startCountdown(data.expiresIn);
+          }
+        } else if (!data.active && expiresAtEpoch && Date.now() > expiresAtEpoch) {
+          showAlert('Session expired. Click Restart to try again.', 'error');
+        }
+      } catch (_) {}
+    }
+
+    // Step 1: Start
+    btnStart.addEventListener('click', async () => {
+      clearAlert();
+      btnStart.disabled = true;
+      btnStart.innerHTML = '<span class="spinner"></span> Launching remote browser...';
+
+      try {
+        const res = await fetch('/admin/api/session', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': getCsrfToken(),
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.message || 'Could not start interactive session.');
+        }
+
+        showAlert('Remote browser session created! Click "Open Google Login" below to sign in.', 'info');
+        step1.classList.remove('active');
+        step1.classList.add('completed');
+        step2.classList.remove('hidden');
+        step2.classList.add('active');
+        step3.classList.remove('hidden');
+        step3.classList.add('active');
+
+        startCountdown(data.expiresIn || 300);
+
+        // Set target on button
+        btnOpenLogin.href = data.interactiveUrl || '/admin/live';
+
+        // Auto-poll session status
+        if (pollInterval) clearInterval(pollInterval);
+        pollInterval = setInterval(checkInteractiveSession, 5000);
+      } catch (err) {
+        showAlert(err.message, 'error');
+      } finally {
+        btnStart.disabled = false;
+        btnStart.textContent = 'Start Google Authentication';
+      }
+    });
+
+    // Step 3: Finish
+    btnFinish.addEventListener('click', async () => {
+      clearAlert();
+      btnFinish.disabled = true;
+      btnFinish.innerHTML = '<span class="spinner"></span> Verifying Firebase Console access...';
+
+      try {
+        const res = await fetch('/admin/api/session/finish', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': getCsrfToken(),
+          },
+        });
+
+        const data = await res.json().catch(() => ({}));
+        if (!res.ok) {
+          throw new Error(data.message || 'Verification failed.');
+        }
+
+        showAlert('Authentication verified! Firebase Console Active Users card was successfully detected and session is stored.', 'success');
+        if (timerInterval) clearInterval(timerInterval);
+        if (pollInterval) clearInterval(pollInterval);
+
+        step2.classList.add('hidden');
+        step3.classList.add('hidden');
+        step1.classList.remove('completed');
+        step1.classList.add('active');
+
+        if (previewWrap.classList.contains('open')) {
+          previewWrap.classList.remove('open');
+          previewIframe.src = '';
+        }
+
+        await loadStatus();
+      } catch (err) {
+        showAlert(err.message, 'error');
+      } finally {
+        btnFinish.disabled = false;
+        btnFinish.textContent = 'Finish Authentication';
+      }
+    });
+
+    // Restart / Cancel
+    btnRestart.addEventListener('click', async () => {
+      clearAlert();
+      btnRestart.disabled = true;
+      btnRestart.textContent = 'Resetting...';
+
+      try {
+        await fetch('/admin/api/session/cancel', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': getCsrfToken(),
+          },
+        });
+
+        if (timerInterval) clearInterval(timerInterval);
+        if (pollInterval) clearInterval(pollInterval);
+        expiresAtEpoch = null;
+
+        step2.classList.add('hidden');
+        step3.classList.add('hidden');
+        step1.classList.remove('completed');
+        step1.classList.add('active');
+
+        if (previewWrap.classList.contains('open')) {
+          previewWrap.classList.remove('open');
+          previewIframe.src = '';
+        }
+
+        showAlert('Interactive session cancelled. You may now start a new authentication session.', 'info');
+        await loadStatus();
+      } catch (err) {
+        showAlert('Could not cancel session: ' + err.message, 'error');
+      } finally {
+        btnRestart.disabled = false;
+        btnRestart.textContent = 'Restart Authentication';
+      }
+    });
+
+    // Optional desktop preview toggle
+    btnTogglePreview.addEventListener('click', () => {
+      const isOpen = previewWrap.classList.toggle('open');
+      if (isOpen) {
+        previewIframe.src = '/admin/live';
+        btnTogglePreview.textContent = 'Hide Desktop Preview';
+      } else {
+        previewIframe.src = '';
+        btnTogglePreview.textContent = 'Toggle Desktop Preview (Optional)';
+      }
+    });
+
+    // Initial load
+    loadStatus();
+    checkInteractiveSession();
+  </script>
+</body>
+</html>

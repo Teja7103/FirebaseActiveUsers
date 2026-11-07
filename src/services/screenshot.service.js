@@ -56,15 +56,26 @@ async function captureOnce() {
       currentUrl.includes('/signin') ||
       currentUrl.includes('/o/oauth')
     ) {
+      try {
+        require('./auth.service').markAuthExpired('FIREBASE_REDIRECT_TO_GOOGLE');
+      } catch (_) { /* ignore */ }
       throw new AuthRequiredError(
-        'Firebase session has expired. Please re-authenticate via POST /auth/start.'
+        'Firebase session has expired. Please re-authenticate via /admin/auth.'
       );
     }
 
     const frame = page.frameLocator('iframe').first();
     const card = frame.locator(config.browser.cardSelector);
-    await card.waitFor({ state: 'visible', timeout: config.browser.cardWaitTimeout });
-    const buffer = await card.screenshot();
+    let buffer;
+    try {
+      await card.waitFor({ state: 'visible', timeout: config.browser.cardWaitTimeout });
+      buffer = await card.screenshot();
+    } catch (selectorErr) {
+      // Fallback text locator matching authenticate.js
+      const textCard = frame.getByText(config.browser.cardText, { exact: false }).first();
+      await textCard.waitFor({ state: 'visible', timeout: 30000 });
+      buffer = await textCard.screenshot();
+    }
 
     cacheBuffer = buffer;
     cacheCapturedAt = new Date().toISOString();
