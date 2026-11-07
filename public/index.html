@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Firebase Active Users Screenshot Service</title>
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <main class="container">
+    <h1>Firebase Active Users Screenshot Service</h1>
+    <p class="subtitle">Captures the actual Firebase Console &rarr; Analytics &rarr; Active Users in Last 30 Minutes card as a PNG.</p>
+
+    <section class="card" id="auth-card">
+      <h2>Authentication</h2>
+      <div id="auth-status">Checking...</div>
+      <div id="api-token-row">
+        <label for="api-token">API access token</label>
+        <input id="api-token" type="password" placeholder="Required for screenshot capture" />
+      </div>
+      <div id="reauth-section" class="hidden">
+        <p><strong>Reauthentication required.</strong> Your Google session appears to have expired.</p>
+        <ol>
+          <li>The administrator should run <code>POST /auth/start</code> with the admin token.</li>
+          <li>Complete the Google sign-in / MFA in the browser window.</li>
+          <li>Come back and capture a screenshot.</li>
+        </ol>
+        <label for="admin-token">Admin token</label>
+        <input id="admin-token" type="password" placeholder="Required for POST /auth/start" />
+        <button id="start-auth-btn" type="button">Run re-authentication (opens browser window)</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2>Capture</h2>
+      <button id="capture-btn">Capture Screenshot</button>
+      <div id="error" class="error hidden"></div>
+      <div class="preview-wrap">
+        <img id="preview" alt="Firebase Active Users screenshot" />
+      </div>
+      <div class="meta">Last successful capture: <span id="last-capture">never</span></div>
+    </section>
+  </main>
+  <script src="/app.js"></script>
+</body>
+</html>

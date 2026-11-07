@@ -1,0 +1,23 @@
+{
+  "name": "firebase-active-users-screenshot",
+  "version": "1.0.0",
+  "description": "Captures the Firebase Console Analytics Active Users card as a PNG via Playwright.",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "auth": "node scripts/authenticate.js"
+  },
+  "keywords": [
+    "firebase",
+    "playwright",
+    "screenshot",
+    "analytics"
+  ],
+  "author": "Saiteja Bolla",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.22.3",
+    "playwright": "^1.49.1"
+  }
+}

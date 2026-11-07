@@ -1,0 +1,12 @@
+node_modules/
+browser-profile/
+google-auth-state.json
+storage/
+screenshots/
+session-backups/
+.env
+.env.*
+!.env.example
+*.log
+.DS_Store
+Thumbs.db
