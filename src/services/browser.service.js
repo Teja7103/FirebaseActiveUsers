@@ -71,7 +71,7 @@ function getBrowserContext() {
  */
 async function launchContextForAuth() {
   return chromium.launchPersistentContext(config.browser.profileDir, {
-    headless: false,
+    headless: config.browser.headless,
     viewport: config.browser.viewport,
     args: [
       '--disable-field-trial-config',
