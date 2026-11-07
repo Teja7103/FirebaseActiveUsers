@@ -102,10 +102,10 @@ function getBrowserlessWsEndpoint() {
       const sep = u.includes('?') ? '&' : '?';
       u = `${u}${sep}token=${encodeURIComponent(config.browserless.token)}`;
     }
-    // Append keepalive timeout (10 minutes) if not configured
-    if (!u.includes('timeout=')) {
+    // Only append custom timeout if explicitly configured by environment
+    if (process.env.BROWSERLESS_TIMEOUT_MS && !u.includes('timeout=')) {
       const sep = u.includes('?') ? '&' : '?';
-      u = `${u}${sep}timeout=600000`;
+      u = `${u}${sep}timeout=${process.env.BROWSERLESS_TIMEOUT_MS}`;
     }
     return u;
   }
@@ -237,7 +237,7 @@ async function createInteractivePage() {
   let cdp = null;
   let liveURL = null;
   let liveURLId = null;
-  let liveTimeout = config.browserless.liveTimeoutMs;
+  let liveTimeout = Math.min(config.browserless.liveTimeoutMs || 115000, 120000);
 
   const isRemote = isBrowserlessConfigured();
 
@@ -249,7 +249,7 @@ async function createInteractivePage() {
 
       const liveRes = await cdp.send('Browserless.liveURL', {
         interactable: true,
-        timeout: config.browserless.liveTimeoutMs,
+        timeout: liveTimeout,
         quality: 80,
         resizable: true,
         showBrowserInterface: true,

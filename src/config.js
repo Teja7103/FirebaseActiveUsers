@@ -39,7 +39,7 @@ module.exports = {
     wsEndpoint: process.env.BROWSERLESS_WS_ENDPOINT || '',
     token: process.env.BROWSERLESS_TOKEN || process.env.BROWSERLESS_API_KEY || '',
     publicUrl: process.env.BROWSERLESS_PUBLIC_URL || '',
-    liveTimeoutMs: parseInt(process.env.BROWSERLESS_LIVE_TIMEOUT_MS || '300000', 10),
+    liveTimeoutMs: parseInt(process.env.BROWSERLESS_LIVE_TIMEOUT_MS || '115000', 10),
   },
 
   admin: {
